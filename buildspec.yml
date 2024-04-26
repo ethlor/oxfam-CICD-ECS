@@ -1,0 +1,37 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+
+      - echo "Performing manual install of compose cli"
+      - curl -L -o docker-linux-amd64.tar.gz https://github.com/docker/compose-cli/releases/download/v1.0.10/docker-linux-amd64.tar.gz
+      - tar xzf docker-linux-amd64.tar.gz
+      - chmod +x docker/docker
+      - ls -ltr
+      - docker/docker compose --help
+      - which docker
+      - ln -s $(which docker) /usr/local/bin/com.docker.cli
+      - REPOSITORY_URI_FRONTEND=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/frontend
+      - REPOSITORY_URI_BACKEND=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/backend
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+      
+  build:
+    commands:
+
+      - echo Build started on `date`
+      - docker/docker compose build
+      - echo "Tagging Docker image for Docker Hub"
+      - docker images
+      - docker tag src_backend:latest $REPOSITORY_URI_BACKEND:latest
+      - docker tag src_frontend:latest $REPOSITORY_URI_FRONTEND:latest
+  post_build:
+    commands:
+
+      - docker push $REPOSITORY_URI_BACKEND:latest
+      - docker push $REPOSITORY_URI_FRONTEND:latest
+      - printf '[{"name":"oxfam-container","imageUri":"%s"},{"name":"oxfam_backend_container","imageUri":"%s"}]' $REPOSITORY_URI_FRONTEND:$IMAGE_TAG $REPOSITORY_URI_BACKEND:$IMAGE_TAG > imagedefinitions.json
+
+artifacts:
+  files: imagedefinitions.json
